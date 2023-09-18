@@ -20,8 +20,6 @@ include(FetchContent)
         GIT_TAG master
 )
 
-set (XLNT_STATIC = 1)
-
 FetchContent_MakeAvailable(nana)
 FetchContent_MakeAvailable(xlnt)
 
@@ -37,6 +35,8 @@ target_link_libraries(geom-test
 	nana
     xlnt
 )
+
+set (XLNT_STATIC = 1)
 
 if (MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG
