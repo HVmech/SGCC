@@ -46,8 +46,6 @@ FetchContent_MakeAvailable(xlnt)
 # add executable
 add_executable(sgcc
 	main.cpp
-    #src/general_form.cpp
-    #src/section_editor.cpp
     src/info.cpp
     src/shape_constructor.cpp
     src/point.cpp
