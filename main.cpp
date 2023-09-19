@@ -1,3 +1,5 @@
+#pragma once
+
 // nana headers
 #include <nana/gui.hpp>
 #include <nana/gui/widgets/scroll.hpp>
@@ -10,9 +12,16 @@
 #include <nana/gui/widgets/listbox.hpp>
 #include <nana/gui/widgets/textbox.hpp>
 #include <nana/gui/widgets/picture.hpp>
+#include <nana/gui/widgets/menubar.hpp>
 
 // xlnt headers
-#include <xlnt/xlnt.hpp>
+#include <xlnt/workbook/workbook.hpp>
+#include <xlnt/worksheet/worksheet.hpp>
+#include <xlnt/worksheet/range.hpp>
+#include <xlnt/cell/cell.hpp>
+#include <xlnt/styles/alignment.hpp>
+#include <xlnt/styles/border.hpp>
+#include <xlnt/styles/number_format.hpp>
 
 // std headers
 #include <iostream>
@@ -21,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <algorithm>
+#include <sstream>
 
 namespace sgcc
 {
@@ -40,8 +50,11 @@ namespace sgcc
         int axisgap;
         int axisweight;
         size_t id;
-        int xlsxoffset;
+        std::string xlsxsheetname;
         std::string xlsxname;
+        nana::screen screen;
+        nana::rectangle resolution;
+        const char* icon_filename = {"sgcc.ico"};
     };
 
     struct parameters
@@ -112,7 +125,7 @@ namespace sgcc
 
         ~axis() {};
 
-        void regenerate(std::vector<point*>& arr, nana::size& size, int gap) {
+        void regenerate(std::vector<point*>& arr, nana::size& size) {
             if(visible){
                 if(arr.size()){
                     m_br.x = 0;
@@ -281,7 +294,8 @@ namespace sgcc
             nana::window owner,
             const nana::rectangle& rectan,
             const nana::appearance& appear,
-            parameters& params
+            parameters& params,
+            globals& gl
         ) :
             nana::form(owner, rectan, appear),
             m_params{},
@@ -298,6 +312,9 @@ namespace sgcc
             m_figure{"environment.bmp"}
         {
             this->caption("Parameters");
+
+            //Set icon for the app
+            nana::API::window_icon(this->handle(), nana::paint::image(gl.icon_filename));
 
             m_picture.load(m_figure);
             m_picture.align(nana::align::center, nana::align_v::center);
@@ -456,11 +473,11 @@ namespace sgcc
             m_dw{*this},
             m_vscr {this->handle(), nana::rectangle(10,10,500,500), true},
             m_hscr {this->handle(), nana::rectangle(10,10,500,500), true},
-            m_img{"test.bmp"},
             m_align_point{nana::point {}, 0, nana::colors::black, nana::colors::white, false},
             m_idle{"Current position : - ; -"},
             ax{}
         {
+            m_img = nana::paint::image{environment(gl)};
             m_plc.bind(*this);
             m_imgsz = m_img.size();
 
@@ -526,7 +543,7 @@ namespace sgcc
 
                 m_img.paste(graph, m_pnt);
 
-                ax.regenerate(m_points, m_imgsz, gl.axisgap);
+                ax.regenerate(m_points, m_imgsz);
                 ax.draw(m_pnt, graph, gl.axisweight, gl.axisgap);
 
                 for (const auto& i : m_shapes) {
@@ -572,7 +589,7 @@ namespace sgcc
                             m_align_point.coordinates() = m_mouse;
                         }
                     }
-                    this->modal_form(mouse_arg);
+                    this->modal_form(mouse_arg, gl);
 
                     if(m_params.size.width*m_params.size.height) {
                         m_params.placement += m_mouse;
@@ -609,7 +626,7 @@ namespace sgcc
                     for (const auto& i : elembox.selected()){
                         elembox.at(0).at(i.item).select(false);
                     }
-                    ax.regenerate(m_points, m_imgsz, gl.axisgap);
+                    ax.regenerate(m_points, m_imgsz);
                     m_dw.update();
                 }
                 if(arg.key == 127) {
@@ -618,34 +635,22 @@ namespace sgcc
                     for(size_t i = 0; i < elems.size(); ++i){
                         for (size_t j = 0; j < m_points.size(); ++j) {
                             if (m_points[j]->id == m_shapes[elems[i].item - i]->properties().id) {
-                                //point* ptr1 = 
                                 delete m_points[j];
                                 m_points.erase(m_points.begin() + j);
-                                //delete ptr1;
                                 --j;
                             }
                         }
-                        //shape* ptr2 = 
                         delete m_shapes[elems[i].item - i];
                         m_shapes.erase(m_shapes.begin() + elems[i].item - i);
-                        //delete ptr2;
                     }
-                    ax.regenerate(m_points, m_imgsz, gl.axisgap);
+                    ax.regenerate(m_points, m_imgsz);
                     m_dw.update();
                 }
             });
 
             this->events().mouse_enter([&](const nana::arg_mouse & mouse_arg){
                 m_mouse = mouse_arg.pos - m_pnt;
-                m_dynamic = 
-                    "Current position : " +
-                    std::to_string(m_mouse.x/gl.pxpermm) +
-                    "," +
-                    std::to_string((m_mouse.x*10)%(gl.pxpermm*10)) +
-                    " ; " +
-                    std::to_string((static_cast<int>(m_imgsz.height) - m_mouse.y)/gl.pxpermm) +
-                    "," +
-                    std::to_string(((static_cast<int>(m_imgsz.height) - m_mouse.y)*10)%(gl.pxpermm*10));
+                m_dynamic = dynamic(gl);
                 if(this->check_borders(m_mouse, gl.pxpermm)){
                     stat.caption(m_dynamic);
                 }
@@ -661,15 +666,7 @@ namespace sgcc
             this->events().mouse_move([&](const nana::arg_mouse& mouse_arg){
                 m_mouse = mouse_arg.pos - m_pnt;
                 if(this->check_borders(m_mouse, gl.pxpermm)){
-                    m_dynamic = 
-                        "Current position : " +
-                        std::to_string(m_mouse.x/gl.pxpermm) +
-                        "," +
-                        std::to_string((m_mouse.x*10)%(gl.pxpermm*10)) +
-                        " ; " +
-                        std::to_string((static_cast<int>(m_imgsz.height) - m_mouse.y)/gl.pxpermm) +
-                        "," +
-                        std::to_string(((static_cast<int>(m_imgsz.height) - m_mouse.y)*10)%(gl.pxpermm*10));
+                    m_dynamic = dynamic(gl);
                     stat.caption(m_dynamic);
 
                     if(gl.align){
@@ -685,6 +682,17 @@ namespace sgcc
                     stat.caption(m_idle);
                 }
             });
+        }
+
+        std::string dynamic(globals& gl) {
+            return "Current position : " +
+                std::to_string(m_mouse.x/gl.pxpermm) +
+                "," +
+                std::to_string(((m_mouse.x)%(gl.pxpermm))*10/gl.pxpermm) +
+                " ; " +
+                std::to_string((static_cast<int>(m_imgsz.height) - m_mouse.y)/gl.pxpermm) +
+                "," +
+                std::to_string(((static_cast<int>(m_imgsz.height) - m_mouse.y)%(gl.pxpermm)*10/gl.pxpermm));
         }
 
         bool alignment(nana::point& point, int radius) const {
@@ -709,7 +717,7 @@ namespace sgcc
             );
         }
 
-        void modal_form(const nana::arg_click& arg){
+        void modal_form(const nana::arg_click& arg, globals& gl){
             shape_constructor fm(
                 arg.window_handle,
                 nana::API::make_center(arg.window_handle, 550, 360),
@@ -719,7 +727,8 @@ namespace sgcc
                     nana::appear::taskbar,
                     nana::appear::floating
                 >(),
-                m_params
+                m_params,
+                gl
             ); 
             nana::API::modal_window(fm); 
         }
@@ -728,7 +737,7 @@ namespace sgcc
         void calculate(globals& gl) {
             xlnt::workbook wb;
             xlnt::worksheet ws = wb.active_sheet();
-            int current_row = gl.xlsxoffset;
+            ws.title(gl.xlsxsheetname);
 
             xlnt::alignment center;
             center.horizontal(xlnt::horizontal_alignment::center).vertical(xlnt::vertical_alignment::center);
@@ -764,10 +773,7 @@ namespace sgcc
             ws.cell("H2").value("F*Y2, см4");
             ws.cell("I2").value("Ic, см4");
 
-            std::cout << "ex.top = " << ax.top() << std::endl;
-            std::cout << "ex.bottom = " << ax.bottom() << std::endl;
             for (int i = 0; i < m_shapes.size(); ++i) {
-                std::cout << "x, y = " << m_shapes[i]->properties().placement.x << ", " << m_shapes[i]->properties().placement.y << std::endl;
                 m_shapes[i]->to_xlsx(ws, ax, i);
             }
 
@@ -885,11 +891,71 @@ namespace sgcc
             }
 
             wb.save(gl.xlsxname);
-            std::cout << "Step 4" << std::endl;
+            nana::msgbox inf(this->handle(), "SGCC output");
+            inf.icon(nana::msgbox::icon_t::icon_information);
+            inf << "Success!";
+            inf.show();
         }
 
-        axis ax;
+        std::string environment(globals& gl) {
+            int i = 0, j = 0;
+            if(gl.resolution.dimension().width >= 3200){
+                i = 6;
+            } else if(gl.resolution.dimension().width >= 2400 && gl.resolution.dimension().width < 3200) {
+                i = 5;
+            } else if(gl.resolution.dimension().width >= 1800 && gl.resolution.dimension().width < 2400){
+                i = 4;
+            } else if(gl.resolution.dimension().width >= 1200 && gl.resolution.dimension().width < 1800){
+                i = 3;
+            } else if(gl.resolution.dimension().width >= 1000 && gl.resolution.dimension().width < 1200){
+                i = 2;
+            } else if(gl.resolution.dimension().width < 1000){
+                i = 1;
+            }
+            if(gl.resolution.dimension().height >= 2400){
+                j = 6;
+            } else if(gl.resolution.dimension().height >= 1800 && gl.resolution.dimension().height < 2400) {
+                j = 5;
+            } else if(gl.resolution.dimension().height >= 1200 && gl.resolution.dimension().height < 1800){
+                j = 4;
+            } else if(gl.resolution.dimension().height >= 1000 && gl.resolution.dimension().height < 1200){
+                j = 3;
+            } else if(gl.resolution.dimension().height >= 850 && gl.resolution.dimension().height < 1000){
+                j = 2;
+            } else if(gl.resolution.dimension().height < 850){
+                j = 1;
+            }
+            i = i > j ? i : j;
+            switch(i){
+                case 1:
+                    return {"field-800x600.bmp"};
+                case 2:
+                    return {"field-1000x850.bmp"};
+                case 3:
+                    return {"field-1200x1000.bmp"};
+                case 4:
+                    return {"field-1800x1200.bmp"};
+                case 5:
+                    return {"field-2400x1800.bmp"};
+                case 6:
+                    return {"field-3200x2400.bmp"};
+                default:
+                    return {"field-800x600.bmp"};
+            }
+        }
+
+        virtual ~section_editor() {
+            for(size_t i = 0; i < m_shapes.size(); ++i) {
+                delete m_shapes[i];
+            }
+            for(size_t i = 0; i < m_points.size(); ++i) {
+                delete m_points[i];
+            }
+        }
+
+        friend class axis_option_group;
     private:
+        axis ax;
         bool m_need_vscr, m_need_hscr;
         bool m_alignment = false;
         point m_align_point;
@@ -943,6 +1009,58 @@ namespace sgcc
         }
     };
 
+    class info :
+        public nana::form
+    {
+    public:
+        info(nana::window owner, globals& gl) :
+        nana::form{
+            owner, nana::API::make_center(owner, 250, 370), 
+            nana::appear::decorate <nana::appear::minimize, nana::appear::taskbar, nana::appear::floating>()
+        },
+        m_version{*this, "SGCC v0.4"},
+        m_info{*this},
+        m_str{}
+        {
+            nana::API::window_icon(this->handle(), nana::paint::image(gl.icon_filename));
+
+            m_str << "Weights:" << '\n';
+            m_str << '\t' << "Point: " << gl.pointweight << '\n';
+            m_str << '\t' << "Line: " << gl.lineweight << '\n';
+            m_str << '\t' << "Axis: " << gl.axisweight << '\n';
+            m_str << '\n';
+            m_str << "Axis gap: " << gl.axisgap << " px" << '\n';
+            m_str << '\n';
+            m_str << "Scale: " << gl.pxpermm << " px/mm" << '\n';
+            m_str << '\n';
+            m_str << "Alignment: " << '\n';
+            m_str << '\t' << "Active: " << gl.align << '\n';
+            m_str << '\t' << "Radius: " << gl.alignradius << '\n';
+            m_str << '\n';
+            m_str << "Output table name: " << gl.xlsxname << '\n';
+
+            m_info.caption(m_str.str());
+            //m_info.text_align(nana::align::center, nana::align_v::center);
+            m_version.text_align(nana::align::center, nana::align_v::center);
+
+            m_plc.bind(*this);
+            m_plc.div( R"(<vertical margin=10
+                <version weight=30>
+                <information>
+            )");
+
+            m_plc["version"] << m_version;
+            m_plc["information"] << m_info;
+
+            m_plc.collocate();
+        }
+        virtual ~info() {}
+    private:
+        std::stringstream m_str;
+        nana::label m_version, m_info;
+        nana::place m_plc;
+    };
+
     elementbox::oresolver& operator << (elementbox::oresolver& orr , parameters& params)
     {
         orr << params.name;
@@ -961,91 +1079,112 @@ namespace sgcc
         }
         return orr ;
     }
+
+    class general_form :
+        public nana::form
+    {
+    public:
+        general_form(globals& gl) : 
+            nana::form{},
+            m_cursor_status{*this, "Current position : - ; -"},
+            m_calculate{*this, "Calculate"},
+            m_menu{*this},
+            m_elements_list{*this},
+            m_section_editor{*this, gl, m_elements_list, m_cursor_status},
+            m_axis_options{*this, m_section_editor}
+        {
+            m_plc.bind(*this);
+
+            //Toggle size of created form based on screen resolution
+            this->move(gl.resolution.x, gl.resolution.y);
+            this->outline_size(gl.resolution.dimension());
+            this->caption("SGC Calc");
+
+            //Set icon for the app
+            nana::API::window_icon(*this, nana::paint::image(gl.icon_filename));
+
+            m_cursor_status.text_align(nana::align::left, nana::align_v::center);
+
+            m_menu.push_back("File").append("Calculate", [&](nana::menu::item_proxy&)
+            {
+                m_section_editor.calculate(gl);
+            });
+
+            m_menu.at(0).append("Quit", [&](nana::menu::item_proxy&)
+            {
+                this->close();
+            });
+
+            m_menu.push_back("Help").append("Info", [&](nana::menu::item_proxy&)
+            {
+                info inform {*this, gl};
+                nana::API::modal_window(inform); 
+            });
+
+            m_plc.div( R"(vertical gap=10 margin=5
+                <menu_panel weight = 50> 
+                <horizontal
+                    <section_editor_panel> | 20%
+                    <vertical
+                        <elements_list_panel margin=5>
+                        <axis_options_panel margin=5 gap=10 weight=100>
+                        <control button margin=5 gap=10 weight=50>
+                    >
+                > 
+                <tatus_panel weight = 50>
+            )" );
+            m_plc["menu_panel"] << m_menu ;
+            m_plc["section_editor_panel"] << m_section_editor;
+            m_plc["elements_list_panel"] << m_elements_list;
+            m_plc["axis_options_panel"] << m_axis_options;
+            m_plc["control_button"] << m_calculate;
+            m_plc["status_panel"] << m_cursor_status;
+
+            m_calculate.events().click([&]
+            {
+                m_section_editor.calculate(gl);
+            });
+
+            this->events().unload([&,this](const nana::arg_unload& arg)
+            {
+                nana::msgbox qst(this->handle(), {}, nana::msgbox::yes_no);
+                qst.icon(nana::msgbox::icon_t::icon_question);
+                qst << "Are you sure you want to quit?";
+                arg.cancel = (qst() == qst.pick_no);
+            });
+
+            m_plc.collocate();
+
+            this->show();
+        }
+    private:
+        nana::place m_plc;
+        nana::label m_cursor_status;
+        nana::button m_calculate;
+        nana::menubar m_menu;
+        elementbox m_elements_list;
+        section_editor m_section_editor;
+        axis_option_group m_axis_options;
+    };
+
 }
 
-    using namespace sgcc;
-    int main(int argc, char** argv) {
-        //Toggle size of created form based on screen resolution
-        const auto scr = nana::screen();
-        const auto res = scr.get_primary().workarea();
-        nana::form general_form;
-        general_form.move(res.x, res.y);
-        general_form.outline_size(res.dimension());
-        general_form.caption("SGC Calc");
-        //Main window created
+int main() {
+    sgcc::globals cn;
+    cn.lineweight = 1;
+    cn.pointweight = 3;
+    cn.pxpermm = 10;
+    cn.align = true;
+    cn.alignradius = 10;
+    cn.axisgap = 20;
+    cn.axisweight = 0;
+    cn.id = 0;
+    cn.xlsxsheetname = {"sgcc output"};
+    cn.xlsxname = {"result.xlsx"};
+    cn.screen = nana::screen();
+    cn.resolution = cn.screen.get_primary().workarea();
 
-        //Set icon for the app
-        const char* icon_filename {"sgcc.ico"};
-        nana::API::window_icon(
-            general_form.handle(),
-            nana::paint::image(icon_filename)
-        );
-        //Icon is set
+    sgcc::general_form sgcc(cn);
 
-        globals cn;
-        cn.lineweight = 1;
-        cn.pointweight = 3;
-        cn.pxpermm = 10;
-        cn.align = true;
-        cn.alignradius = 10;
-        cn.axisgap = 20;
-        cn.axisweight = 0;
-        cn.id = 0;
-        cn.xlsxoffset = 1;
-        cn.xlsxname = {"result.xlsx"};
-
-        // the most external widgets
-        nana::label sgcc_menu {general_form, "Menu imitation"};
-        nana::label sgcc_bttm {general_form, " "};
-
-        elementbox sgcc_elem_list{general_form};
-
-        section_editor fm {general_form, cn, sgcc_elem_list, sgcc_bttm};
-
-        axis_option_group sgcc_ax_slct{general_form, fm};
-
-        //nana::button sgcc_chk_bttn {general_form,  "Check"};
-        nana::button sgcc_clc_bttn {general_form,  "Calculate"};
-
-        nana::place plcr(general_form);
-        plcr.div( R"(vertical gap=10 margin=5
-            <SGCC_menu_panel weight = 50> |
-            <horizontal
-                <SGCC_section_editor_panel> | 20%
-                <vertical
-                    <SGCC_elements_list margin=5>
-                    <SGCC_axis_selector margin=5 gap=10 weight=100>
-                    <SGCC_control_buttons margin=5 gap=10 weight=50>
-                >
-            > |
-            <SGCC_status_panel weight = 50>
-        )" );
-        plcr["SGCC_menu_panel"] << sgcc_menu ;
-        plcr["SGCC_section_editor_panel"] << fm;
-        plcr["SGCC_elements_list"] << sgcc_elem_list;
-        plcr["SGCC_axis_selector"] << sgcc_ax_slct;
-        //plcr["SGCC_control_buttons"] << sgcc_chk_bttn << sgcc_clc_bttn;
-        plcr["SGCC_control_buttons"] << sgcc_clc_bttn;
-        plcr["SGCC_status_panel"] << sgcc_bttm;
-
-        sgcc_clc_bttn.events().click([&]
-        {
-            fm.calculate(cn);
-/*             if ((this->get_width()) && (this->get_height()) && (this->get_name())) {
-                this->m_params.type = type::Rect;
-                this->close();
-            } else {
-                this->m_params.size.width = 0;
-                this->m_params.size.height = 0;
-                nana::msgbox err(this->handle(), "Error");
-                err.icon(nana::msgbox::icon_t::icon_information);
-                err << "Invalid input";
-                err.show();
-            } */
-        });
-
-        plcr.collocate();
-
-        general_form.show();
-        nana::exec();
-    }
+    nana::exec();
+}

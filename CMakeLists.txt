@@ -1,48 +1,83 @@
-# version 3.12 or later of CMake or needed later for installing nana
-cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 
-project(myawesomewonderfullproject
-	VERSION 0.1
+# CMake version requirements
+cmake_minimum_required(VERSION 3.1.5)
+
+# sgcc project
+project(sgcc
+	VERSION 0.3
 	LANGUAGES CXX
 )
 
-include(FetchContent)
-    FetchContent_Declare(
-        nana
-        GIT_REPOSITORY https://github.com/cnjinhao/nana.git
-        GIT_TAG develop-1.8
-)
-
-include(FetchContent)
-    FetchContent_Declare(
-        xlnt
-        GIT_REPOSITORY https://github.com/tfussell/xlnt.git
-        GIT_TAG master
-)
-
-FetchContent_MakeAvailable(nana)
-FetchContent_MakeAvailable(xlnt)
-
+# select static MSVC runtime (really has effect?!)
 if (MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-add_executable(geom-test
+# include FetchContent
+include(FetchContent)
+
+# declaring nana library
+# branch 'master' is unavailable for Win32
+if(MSVC)
+    FetchContent_Declare(
+        nana
+        GIT_REPOSITORY https://github.com/cnjinhao/nana.git
+        GIT_TAG        develop-1.8
+    )
+else()
+    FetchContent_Declare(
+        nana
+        GIT_REPOSITORY https://github.com/cnjinhao/nana.git
+        GIT_TAG        master
+    )
+endif()
+
+# declaring xlnt library
+FetchContent_Declare(
+    xlnt
+    GIT_REPOSITORY https://github.com/tfussell/xlnt.git
+    GIT_TAG master
+)
+
+# make libraries available
+FetchContent_MakeAvailable(nana)
+FetchContent_MakeAvailable(xlnt)
+
+# add executable
+add_executable(sgcc
 	main.cpp
 )
 
-target_link_libraries(geom-test
+# include
+target_include_directories(sgcc PRIVATE include)
+
+target_link_libraries(sgcc
 	nana
     xlnt
 )
 
-set (XLNT_STATIC = 1)
+# for xlnt static linkage
+set(XLNT_STATIC = 1)
 
-if (MSVC)
-    set(CMAKE_CXX_FLAGS_DEBUG
-  #[["/DWIN32 /D_WINDOWS /EHsc /WX /wd4355 /wd4251 /wd4250 /wd4996"]]
-    CACHE STRING "Debug compiler flags" FORCE
+# Some usefull compiler flags
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(sgcc PRIVATE 
+        -g
+        -Wall
+    )
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(sgcc PRIVATE
+        /EHsc
+        /W2
     )
 endif()
 
-set_target_properties(geom-test PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+# Force both release and debug CXX flags to prevent dynamic linkage of MSVC runtime
+if (MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "/W2 /EHsc" CACHE STRING "Debug compiler flags" FORCE)
+    set(CMAKE_CXX_FLAGS_RELEASE "/W2 /EHsc" CACHE STRING "Release compiler flags" FORCE)
+endif()
+
+# target properties
+set_target_properties(sgcc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
