@@ -46,6 +46,11 @@ FetchContent_MakeAvailable(xlnt)
 # add executable
 add_executable(sgcc
 	main.cpp
+    src/info.cpp
+    src/shape_constructor.cpp
+    src/point.cpp
+    src/axis.cpp
+    src/shapes.cpp
 )
 
 # include
