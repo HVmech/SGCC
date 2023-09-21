@@ -78,23 +78,23 @@ namespace sgcc
     
     void rect::to_xlsx(xlnt::worksheet& ws, axis& ax, int ind) const
     {
-        int a = m_params.size.width*10;
-        int b = m_params.size.height*10;
-        int y;
+        double a = static_cast<double>(m_params.size.width)*10;
+        double b = static_cast<double>(m_params.size.height)*10;
+        double y;
 
         if (ax.placement)
         {
-            y = (m_params.placement.y - ax.top())*10 + b/2;
+            y = static_cast<double>(m_params.placement.y - ax.top())*10 + b/2;
         }
         else
         {
-            y = (ax.bottom() - m_params.placement.y)*10 - b/2;
+            y = static_cast<double>(ax.bottom() - m_params.placement.y)*10 - b/2;
         }
 
         ws.cell("B3").offset(0, ind).value(ind+1);
-        ws.cell("C3").offset(0, ind).value(std::to_string(a/1000) + "," + std::to_string(a%1000));
-        ws.cell("D3").offset(0, ind).value(std::to_string(b/1000) + "," + std::to_string(b%1000));
-        ws.cell("F3").offset(0, ind).value(std::to_string(y/1000) + "," + std::to_string(y%1000));
+        ws.cell("C3").offset(0, ind).value(a/1000);
+        ws.cell("D3").offset(0, ind).value(b/1000);
+        ws.cell("F3").offset(0, ind).value(y/1000);
         std::string r = std::to_string(3+ind);
         ws.cell("E3").offset(0, ind).formula(std::string{"=C" + r + "*D" + r});
         ws.cell("G3").offset(0, ind).formula(std::string{"=E" + r + "*F" + r});
