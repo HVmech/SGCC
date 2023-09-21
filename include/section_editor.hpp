@@ -412,7 +412,7 @@ namespace sgcc
 
         for (int i = 0; i < m_shapes.size(); ++i)
         {
-            m_shapes[i]->to_xlsx(ws, ax, i);
+            if(m_shapes[i]->properties().visible) m_shapes[i]->to_xlsx(ws, ax, i);
         }
 
         const int offset = static_cast<int>(m_shapes.size());
@@ -483,8 +483,8 @@ namespace sgcc
             ws.cell("F3").offset(0, offset +6).value("H =");
             ws.cell("F3").offset(0, offset +6).alignment(right);
 
-            int h = (ax.bottom() - ax.top())*10;
-            ws.cell("G3").offset(0, offset +6).value(std::to_string(h/1000) + "," + std::to_string(h%1000));
+            double h = static_cast<double>(ax.bottom() - ax.top())*10;
+            ws.cell("G3").offset(0, offset +6).value(h/1000);
             ws.cell("G3").offset(0, offset +6).number_format(longer);
             ws.cell("G3").offset(0, offset +6).alignment(center);
 
